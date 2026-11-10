@@ -1,0 +1,51 @@
+# Despliega el sitio en GitHub Pages cada vez que se hace push a main
+name: Desplegar en GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:   # permite lanzarlo a mano desde la pestaña Actions
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Solo un despliegue a la vez; no cancela uno que ya está en curso
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  verificar:
+    name: Verificar archivos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Comprobar que existen las imágenes usadas en la página
+        run: |
+          faltan=0
+          for f in $(grep -oE 'src="img/[^"]+"' nosotros.html | sed -E 's/src="([^"]+)"/\1/' | sort -u); do
+            if [ ! -f "$f" ]; then echo "::error::Falta el archivo $f"; faltan=1; else echo "OK  $f"; fi
+          done
+          exit $faltan
+
+  desplegar:
+    name: Desplegar
+    needs: verificar
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - name: Preparar el sitio (sin archivos internos del repositorio)
+        run: |
+          mkdir _site
+          cp -r index.html nosotros.html img _site/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
